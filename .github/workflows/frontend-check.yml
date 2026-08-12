@@ -1,9 +1,6 @@
 name: check frontend build
 on:
-  workflow_run:
-    workflows: ["Change versions"]
-    types:
-      - completed
+  workflow_dispatch:
 
   merge_group:
   push:

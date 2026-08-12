@@ -1,9 +1,6 @@
 name: Backend check
 on:
-  workflow_run:
-    workflows: ["Change versions"]
-    types:
-      - completed
+  workflow_dispatch:
   push:
     paths:
       - "backend/**"
