@@ -291,6 +291,15 @@ function renderRenameColumn(
 		case 'mysql':
 			return `ALTER TABLE ${tableRef} RENAME COLUMN ${oldName} TO ${newName};`
 		case 'ms_sql_server':
+			if (!/^[a-zA-Z0-9_.]+$/.test(tableRef)) {
+				throw new Error('Invalid input')
+			}
+			if (!/^[a-zA-Z0-9_]+$/.test(oldName)) {
+				throw new Error('Invalid input')
+			}
+			if (!/^[a-zA-Z0-9_]+$/.test(newName)) {
+				throw new Error('Invalid input')
+			}
 			return `EXEC sp_rename '${tableRef}.${oldName}', '${newName}', 'COLUMN';`
 		default:
 			throw new Error(`Unsupported database type: ${dbType}`)
