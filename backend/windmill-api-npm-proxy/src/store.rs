@@ -309,6 +309,10 @@ pub(crate) async fn pull_from_object_store(_dir: &Path, _key: &str) -> Result<Op
             Error::InternalErr(format!("Failed to create {:?}: {e}", scratch.path))
         })?;
         let tar_path = scratch.path.join("archive.tar");
+        // Prevent path traversal attacks by rejecting paths containing '..'.
+        if tar_path.components().any(|c| c == Component::ParentDir) {
+            return Err(Error::InternalErr(format!("Invalid input: {}", tar_path.display())));
+        }
         let mut file = tokio::fs::File::create(&tar_path)
             .await
             .map_err(|e| Error::InternalErr(format!("Failed to create {tar_path:?}: {e}")))?;
@@ -331,6 +335,10 @@ pub(crate) async fn pull_from_object_store(_dir: &Path, _key: &str) -> Result<Op
         let destination = _dir.to_path_buf();
         let published = tokio::task::spawn_blocking(move || -> Result<Option<u64>> {
             let unpack_to = scratch.path.join("content");
+            // Prevent path traversal attacks by rejecting paths containing '..'.
+            if tar_path.components().any(|c| c == Component::ParentDir) {
+                return Err(Error::InternalErr(format!("Invalid input: {}", tar_path.display())));
+            }
             let file = std::fs::File::open(&tar_path)
                 .map_err(|e| Error::InternalErr(format!("Failed to open {tar_path:?}: {e}")))?;
             tar::Archive::new(file)
@@ -412,9 +420,17 @@ async fn push_inner(dir: &Path, key: &str) -> Result<()> {
         .await
         .map_err(|e| Error::InternalErr(format!("Failed to create {:?}: {e}", scratch.path)))?;
     let tar_path = scratch.path.join("archive.tar");
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    if tar_path.components().any(|c| c == Component::ParentDir) {
+        return Err(Error::InternalErr(format!("Invalid input: {}", tar_path.display())));
+    }
     let source = dir.to_path_buf();
     let build_at = tar_path.clone();
     tokio::task::spawn_blocking(move || {
+        // Prevent path traversal attacks by rejecting paths containing '..'.
+        if build_at.components().any(|c| c == Component::ParentDir) {
+            return Err(Error::InternalErr(format!("Invalid input: {}", build_at.display())));
+        }
         let file = std::fs::File::create(&build_at)?;
         let mut tar = tar::Builder::new(file);
         tar.append_dir_all(".", &source)?;
@@ -425,6 +441,10 @@ async fn push_inner(dir: &Path, key: &str) -> Result<()> {
     .map_err(|e| Error::InternalErr(format!("Failed to tar {key}: {e}")))?;
 
     const CHUNK: usize = 8 * 1024 * 1024;
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    if tar_path.components().any(|c| c == Component::ParentDir) {
+        return Err(Error::InternalErr(format!("Invalid input: {}", tar_path.display())));
+    }
     let mut file = tokio::fs::File::open(&tar_path)
         .await
         .map_err(|e| Error::InternalErr(format!("Failed to open {tar_path:?}: {e}")))?;
