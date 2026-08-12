@@ -24,6 +24,9 @@ export function makeCountQuery(
 	whereClause: string | undefined = undefined,
 	columnDefs: ColumnDef[]
 ): string {
+	if (!table?.split('.').every(part => /^[a-zA-Z0-9_]+$/.test(part.trim()))) {
+		throw new Error('Invalid input')
+	}
 	const wherePrefix = ' WHERE '
 	const andCondition = ' AND '
 	let quicksearchCondition = ''
@@ -61,16 +64,16 @@ export function makeCountQuery(
 			}
 			query += `SELECT COUNT(*) as count FROM ${table}`
 			break
-		case 'ms_sql_server':
-			if (filteredColumns.length > 0) {
-				quicksearchCondition += `(@p1 = '' OR CONCAT(${filteredColumns.join(
-					', +'
-				)}) LIKE '%' + @p1 + '%')`
-			} else {
-				quicksearchCondition += `(@p1 = '' OR 1 = 1)`
-			}
-			query += `SELECT COUNT(*) as count FROM [${table}]`
-			break
+	case 'ms_sql_server':
+		if (filteredColumns.length > 0) {
+			quicksearchCondition += `(@p1 = '' OR CONCAT(${filteredColumns.join(
+				', +'
+			)}) LIKE '%' + @p1 + '%')`
+		} else {
+			quicksearchCondition += `(@p1 = '' OR 1 = 1)`
+		}
+		query += `SELECT COUNT(*) as count FROM [${table}]`
+		break
 		case 'snowflake': {
 			query = ''
 
@@ -99,38 +102,38 @@ export function makeCountQuery(
 			query += `SELECT COUNT(*) as count FROM ${table}`
 			break
 		}
-		case 'bigquery': {
-			if (filteredColumns.length > 0) {
-				const searchClause = filteredColumns
-					.map((col) => {
-						const def = columnDefs.find((c) => c.field === col.slice(1, -1))
-						if (
-							def?.datatype === 'JSON' ||
-							def?.datatype.startsWith('STRUCT') ||
-							def?.datatype.startsWith('ARRAY')
-						) {
-							return `TO_JSON_STRING(${col})`
-						}
-						return `${col}`
-					})
-					.join(',')
-				quicksearchCondition += `(@quicksearch = '' OR REGEXP_CONTAINS(CONCAT(${searchClause}), '(?i)' || @quicksearch))`
-			} else {
-				quicksearchCondition += `(@quicksearch = '' OR 1 = 1)`
-			}
-			query += `SELECT COUNT(*) as count FROM \`${table}\``
-			break
+	case 'bigquery': {
+		if (filteredColumns.length > 0) {
+			const searchClause = filteredColumns
+				.map((col) => {
+					const def = columnDefs.find((c) => c.field === col.slice(1, -1))
+					if (
+						def?.datatype === 'JSON' ||
+						def?.datatype.startsWith('STRUCT') ||
+						def?.datatype.startsWith('ARRAY')
+					) {
+						return `TO_JSON_STRING(${col})`
+					}
+					return `${col}`
+				})
+				.join(',')
+			quicksearchCondition += `(@quicksearch = '' OR REGEXP_CONTAINS(CONCAT(${searchClause}), '(?i)' || @quicksearch))`
+		} else {
+			quicksearchCondition += `(@quicksearch = '' OR 1 = 1)`
 		}
-		case 'duckdb':
-			if (filteredColumns.length > 0) {
-				quicksearchCondition += ` ($quicksearch = '' OR CONCAT(' ', ${duckdbQuicksearchColumns(
-					columnDefs
-				)}) LIKE CONCAT('%', $quicksearch, '%'))`
-			} else {
-				quicksearchCondition += ` ($quicksearch = '' OR 1 = 1)`
-			}
-			query += `SELECT COUNT(*) as count FROM ${table}`
-			break
+		query += `SELECT COUNT(*) as count FROM \`${table}\``
+		break
+	}
+	case 'duckdb':
+		if (filteredColumns.length > 0) {
+			quicksearchCondition += ` ($quicksearch = '' OR CONCAT(' ', ${duckdbQuicksearchColumns(
+				columnDefs
+			)}) LIKE CONCAT('%', $quicksearch, '%'))`
+		} else {
+			quicksearchCondition += ` ($quicksearch = '' OR 1 = 1)`
+		}
+		query += `SELECT COUNT(*) as count FROM ${table}`
+		break
 		default:
 			throw new Error('Unsupported database type:' + dbType)
 	}
