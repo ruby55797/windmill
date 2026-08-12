@@ -123,6 +123,12 @@ export function transformForeignKeys(rawResults: RawForeignKey[]): TableEditorFo
 
 // PostgreSQL queries
 function makePostgresForeignKeysQuery(tableName: string, schemaName: string): string {
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	return `
 SELECT
     tc.constraint_name as fk_constraint_name,
@@ -152,6 +158,12 @@ ORDER BY
 }
 
 function makePostgresPrimaryKeyQuery(tableName: string, schemaName: string): string {
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	return `
 SELECT
     tc.constraint_name
@@ -167,6 +179,12 @@ LIMIT 1;
 
 // MySQL queries
 function makeMysqlForeignKeysQuery(tableName: string, schemaName: string): string {
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (schemaName && !/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	const whereClause = schemaName
 		? `AND kcu.TABLE_SCHEMA = '${schemaName}'`
 		: `AND kcu.TABLE_SCHEMA = DATABASE()`
@@ -194,6 +212,12 @@ ORDER BY
 }
 
 function makeMysqlPrimaryKeyQuery(tableName: string, schemaName: string): string {
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (schemaName && !/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	const whereClause = schemaName
 		? `AND tc.TABLE_SCHEMA = '${schemaName}'`
 		: `AND tc.TABLE_SCHEMA = DATABASE()`
@@ -213,6 +237,12 @@ LIMIT 1;
 
 // MS SQL Server queries
 function makeMsSqlForeignKeysQuery(tableName: string, schemaName: string): string {
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	return `
 SELECT
     fk.name as fk_constraint_name,
@@ -248,6 +278,12 @@ ORDER BY
 }
 
 function makeMsSqlPrimaryKeyQuery(tableName: string, schemaName: string): string {
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	return `
 SELECT
     kc.name as constraint_name
@@ -316,6 +352,12 @@ function makeBigQueryForeignKeysQuery(tableName: string, schemaName?: string): s
 		throw new Error('BigQuery requires a dataset (schema) name')
 	}
 
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	return `
 SELECT
     tc.constraint_name as fk_constraint_name,
@@ -343,6 +385,12 @@ function makeBigQueryPrimaryKeyQuery(tableName: string, schemaName?: string): st
 		throw new Error('BigQuery requires a dataset (schema) name')
 	}
 
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	return `
 SELECT
     constraint_name
@@ -358,6 +406,12 @@ LIMIT 1;
 // DuckDB queries
 function makeDuckDbForeignKeysQuery(tableName: string, schemaName: string): string {
 	// DuckDB supports foreign keys starting from v0.9.0
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	return `
 SELECT
     fk_constraint.constraint_name as fk_constraint_name,
@@ -384,6 +438,12 @@ ORDER BY
 }
 
 function makeDuckDbPrimaryKeyQuery(tableName: string, schemaName: string): string {
+	if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+		throw new Error('Invalid input')
+	}
+	if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+		throw new Error('Invalid input')
+	}
 	return `
 SELECT
     constraint_name
