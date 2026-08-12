@@ -1,9 +1,6 @@
 name: Rust Client Check
 on:
-  workflow_run:
-    workflows: ["Change versions"]
-    types:
-      - completed
+  workflow_dispatch:
   push:
     paths:
       - "rust-client/**"
