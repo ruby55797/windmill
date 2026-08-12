@@ -2447,6 +2447,10 @@ class DucklakeClient:
         The partition value is bound as a DuckDB arg (never string-interpolated)
         so it cannot inject SQL. `select_sql` is trusted (your own query).
         """
+        if not re.match(r'^[a-zA-Z0-9_]+$', str(partition_col)):
+            raise ValueError("Invalid input")
+        if unique_key is not None and not re.match(r'^[a-zA-Z0-9_]+$', str(unique_key)):
+            raise ValueError("Invalid input")
         t = self._qualified(table, schema)
         # Whole-table (no partition): no partition column; replace rebuilds the
         # table with CREATE OR REPLACE, merge upserts the whole table by key.
@@ -2496,6 +2500,8 @@ class DucklakeClient:
         event-log table — for one `partition`, or the whole table when
         `partition` is None. NOTE: unlike `upsert_partition`, re-running the same
         slice duplicates rows — use only for append-only sources."""
+        if not re.match(r'^[a-zA-Z0-9_]+$', str(partition_col)):
+            raise ValueError("Invalid input")
         t = self._qualified(table, schema)
         # Whole-table (no partition): insert into the bare table, no partition col.
         if partition is None:
@@ -2520,6 +2526,8 @@ class DucklakeClient:
         schema: str = None,
     ):
         """Read a materialized ducklake table, optionally a single partition."""
+        if not re.match(r'^[a-zA-Z0-9_]+$', str(partition_col)):
+            raise ValueError("Invalid input")
         t = self._qualified(table, schema)
         if partition is not None:
             return self.query(
