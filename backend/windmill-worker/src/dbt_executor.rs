@@ -634,13 +634,16 @@ pub(crate) async fn dbt_dep(
     let selected =
         resolve_selection(&prepared, &descriptor, &inv, &mut ctx, job_id, w_id, &conn).await?;
     let manifest = read_manifest(&prepared.project_dir).await?;
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    let manifest_path = prepared
+        .project_dir
+        .join(ARTIFACTS_DIR)
+        .join("manifest.json");
+    if manifest_path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", manifest_path.display())));
+    }
     let manifest_digest = digest(
-        &tokio::fs::read_to_string(
-            prepared
-                .project_dir
-                .join(ARTIFACTS_DIR)
-                .join("manifest.json"),
-        )
+        &tokio::fs::read_to_string(&manifest_path)
         .await
         .unwrap_or_default(),
     );
@@ -1028,7 +1031,11 @@ pub(crate) async fn prepare_project(
     if let Some(modules) = modules {
         write_module_files(job_dir, modules, None).await?;
     }
+    // Prevent path traversal attacks by rejecting paths containing '..'.
     let project_dir = PathBuf::from(job_dir);
+    if project_dir.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", project_dir.display())));
+    }
     if !project_dir.join("dbt_project.yml").exists() {
         return Err(Error::BadRequest(
             "this dbt script carries no project: `dbt_project.yml` was not found. Copy a dbt \
@@ -1279,7 +1286,12 @@ async fn resolve_env(
 }
 
 async fn package_lock_digest(project_dir: &Path) -> error::Result<Option<String>> {
-    match tokio::fs::read_to_string(project_dir.join("package-lock.yml")).await {
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    let lock_path = project_dir.join("package-lock.yml");
+    if lock_path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", lock_path.display())));
+    }
+    match tokio::fs::read_to_string(&lock_path).await {
         Ok(lock) => Ok(Some(digest(&lock))),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(Error::internal_err(format!(
@@ -1327,6 +1339,10 @@ async fn install_packages(
         declares_packages |= f != "package-lock.yml";
         key.push_str(f);
         key.push('\n');
+        // Prevent path traversal attacks by rejecting paths containing '..'.
+        if path.components().any(|c| c == std::path::Component::ParentDir) {
+            return Err(Error::BadRequest(format!("Invalid input: {}", path.display())));
+        }
         key.push_str(&tokio::fs::read_to_string(&path).await.unwrap_or_default());
     }
     if !declares_packages {
@@ -1485,13 +1501,22 @@ async fn publish_to_cache(
 async fn strip_git_remotes(dir: &Path) -> std::io::Result<()> {
     let mut entries = tokio::fs::read_dir(dir).await?;
     while let Some(e) = entries.next_entry().await? {
-        strip_git_remote(&e.path()).await?;
+        // Prevent path traversal attacks by rejecting paths containing '..'.
+        let entry_path = e.path();
+        if entry_path.components().any(|c| c == std::path::Component::ParentDir) {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Invalid input: {}", entry_path.display())));
+        }
+        strip_git_remote(&entry_path).await?;
     }
     Ok(())
 }
 
 async fn strip_git_remote(dir: &Path) -> std::io::Result<()> {
+    // Prevent path traversal attacks by rejecting paths containing '..'.
     let config = dir.join(".git").join("config");
+    if config.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Invalid input: {}", config.display())));
+    }
     if !config.exists() {
         return Ok(());
     }
@@ -1584,6 +1609,10 @@ async fn write_profiles(
         // qualifies. Where the file leaves them implicit they stay `None` and
         // every relation qualifies, since assuming two share a database is what
         // would collapse distinct relations onto a single node.
+        // Prevent path traversal attacks by rejecting paths containing '..'.
+        if path.components().any(|c| c == std::path::Component::ParentDir) {
+            return Err(Error::BadRequest(format!("Invalid input: {}", path.display())));
+        }
         let profile_digest = digest(&tokio::fs::read_to_string(&path).await.unwrap_or_default());
         // Identity only when the descriptor NAMES a warehouse: defaulting to
         // `main` would key a self-hosted profile's assets onto the workspace
@@ -1665,7 +1694,11 @@ async fn write_profiles(
         .as_deref()
         .or(workspace_target.as_deref())
         .unwrap_or("default");
+    // Prevent path traversal attacks by rejecting paths containing '..'.
     let dir = PathBuf::from(job_dir).join("dbt_profiles");
+    if dir.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", dir.display())));
+    }
     tokio::fs::create_dir_all(&dir)
         .await
         .map_err(|e| Error::internal_err(format!("creating the profiles dir: {e}")))?;
@@ -1776,6 +1809,10 @@ async fn adapter_from_profiles_yml(
     profile_name: &str,
     target: Option<&str>,
 ) -> error::Result<ProfileTarget> {
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    if path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", path.display())));
+    }
     let content = tokio::fs::read_to_string(path)
         .await
         .map_err(|e| Error::BadRequest(format!("could not read {}: {e}", path.display())))?;
@@ -1933,7 +1970,12 @@ async fn packages_install_path(
     env: &HashMap<String, String>,
 ) -> error::Result<String> {
     const DEFAULT: &str = "dbt_packages";
-    let Ok(content) = tokio::fs::read_to_string(project_dir.join("dbt_project.yml")).await else {
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    let dbt_project_path = project_dir.join("dbt_project.yml");
+    if dbt_project_path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", dbt_project_path.display())));
+    }
+    let Ok(content) = tokio::fs::read_to_string(&dbt_project_path).await else {
         return Ok(DEFAULT.to_string());
     };
     let declared = serde_yml::from_str::<serde_yml::Value>(&content)
@@ -3624,7 +3666,11 @@ async fn run_dbt_parse(
 pub(crate) async fn read_manifest(
     project_dir: &Path,
 ) -> error::Result<windmill_common::dbt_manifest::Manifest> {
+    // Prevent path traversal attacks by rejecting paths containing '..'.
     let path = project_dir.join(ARTIFACTS_DIR).join("manifest.json");
+    if path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", path.display())));
+    }
     let content = tokio::fs::read_to_string(&path)
         .await
         .map_err(|e| Error::internal_err(format!("dbt produced no manifest.json: {e}")))?;
@@ -3737,8 +3783,13 @@ async fn save_run_state(
     // The durable copy, so a retry works from any worker of the group. Only
     // `run_results.json`: the manifest is a pure function of what `identity`
     // already pins, so the resuming worker re-derives it with a `dbt parse`.
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    let results_path = p.project_dir.join(ARTIFACTS_DIR).join("run_results.json");
+    if results_path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", results_path.display())));
+    }
     let results =
-        tokio::fs::read_to_string(p.project_dir.join(ARTIFACTS_DIR).join("run_results.json"))
+        tokio::fs::read_to_string(&results_path)
             .await
             .ok();
     // No `run_results.json` means nothing resumable happened — cancelled, timed
@@ -3821,7 +3872,18 @@ async fn save_run_state(
         return abandon_local().await;
     }
     for f in ["run_results.json", "manifest.json"] {
-        if tokio::fs::copy(p.project_dir.join(ARTIFACTS_DIR).join(f), staging.join(f))
+        // Prevent path traversal attacks by rejecting paths containing '..'.
+        let src_path = p.project_dir.join(ARTIFACTS_DIR).join(f);
+        if src_path.components().any(|c| c == std::path::Component::ParentDir) {
+            tokio::fs::remove_dir_all(&staging).await.ok();
+            return Err(Error::BadRequest(format!("Invalid input: {}", src_path.display())));
+        }
+        let dst_path = staging.join(f);
+        if dst_path.components().any(|c| c == std::path::Component::ParentDir) {
+            tokio::fs::remove_dir_all(&staging).await.ok();
+            return Err(Error::BadRequest(format!("Invalid input: {}", dst_path.display())));
+        }
+        if tokio::fs::copy(&src_path, &dst_path)
             .await
             .is_err()
         {
@@ -4250,7 +4312,12 @@ async fn restore_run_state(
     // invocation left nothing resumable, and a local generation that outlived it
     // would resurrect a run the newer one replaced. An agent worker has no such
     // authority to consult, so its local copy stands.
-    let local = tokio::fs::read_to_string(dir.join(CURRENT_GENERATION))
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    let current_gen_path = dir.join(CURRENT_GENERATION);
+    if current_gen_path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", current_gen_path.display())));
+    }
+    let local = tokio::fs::read_to_string(&current_gen_path)
         .await
         .ok();
     let generation = chosen_generation(local, conn, latest_job, expected_job)?;
@@ -4271,7 +4338,12 @@ async fn restore_run_state(
     // pruned out from under this restore falls back to the row rather than
     // reporting nothing to resume. An agent worker has no row and gets that
     // report, which is then true.
-    let Ok(saved_results) = tokio::fs::read_to_string(snapshot.join("run_results.json")).await
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    let saved_results_path = snapshot.join("run_results.json");
+    if saved_results_path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", saved_results_path.display())));
+    }
+    let Ok(saved_results) = tokio::fs::read_to_string(&saved_results_path).await
     else {
         return restore_from_db(
             p,
@@ -4290,7 +4362,12 @@ async fn restore_run_state(
     if !has_retryable_node(&saved_results) {
         return Err(nothing_to_retry());
     }
-    let Some(saved) = tokio::fs::read_to_string(snapshot.join("state.json"))
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    let state_json_path = snapshot.join("state.json");
+    if state_json_path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", state_json_path.display())));
+    }
+    let Some(saved) = tokio::fs::read_to_string(&state_json_path)
         .await
         .ok()
         .and_then(|s| serde_json::from_str::<SavedRunState>(&s).ok())
@@ -4322,7 +4399,16 @@ async fn restore_run_state(
         .map_err(|e| {
             Error::internal_err(format!("could not restore the previous run's results: {e}"))
         })?;
-    let needs_parse = tokio::fs::copy(snapshot.join("manifest.json"), target.join("manifest.json"))
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    let snapshot_manifest = snapshot.join("manifest.json");
+    if snapshot_manifest.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", snapshot_manifest.display())));
+    }
+    let target_manifest = target.join("manifest.json");
+    if target_manifest.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err(Error::BadRequest(format!("Invalid input: {}", target_manifest.display())));
+    }
+    let needs_parse = tokio::fs::copy(&snapshot_manifest, &target_manifest)
         .await
         .is_err();
     // The generation was chosen from a row read before the file work above. A run
